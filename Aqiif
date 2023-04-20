@@ -1,0 +1,84 @@
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <unistd.h> 
+#include <signal.h> 
+#include <string.h> 
+ 
+#define MAX_CHILDREN 5 
+ 
+int child_pids[MAX_CHILDREN]; // Array to store child process IDs 
+ 
+void handle_interrupt(int sig) 
+{ 
+    printf("\nInterrupt detected. Exiting...\n"); 
+      for (int i = 0; i < MAX_CHILDREN; i++) 
+       { 
+         if (child_pids[i] > 0) 
+          { 
+            kill(child_pids[i], SIGTERM); // Terminate child processes 
+          }   
+       } 
+    exit(0); 
+} 
+ 
+int main() 
+{ 
+    int pipe_fd[2]; // Pipe file descriptors 
+    int child_count = 0; // Count of child processes 
+    char message[256]; // Message buffer 
+ 
+      if (pipe(pipe_fd) < 0) 
+       { 
+        perror("Pipe creation failed"); 
+        exit(1); 
+       } 
+ 
+    signal(SIGINT, handle_interrupt); // Register signal handler for interrupt 
+ 
+    while (1) 
+      { 
+        printf("Enter a message to send to child process (or 'q' to quit): "); 
+        fgets(message, sizeof(message), stdin); 
+          if (strcmp(message, "q\n") == 0)
+        { 
+            break; // Exit loop if 'q' is entered 
+        } 
+ 
+        int pid = fork(); // Fork a child process 
+        
+        if (pid < 0) 
+         { 
+            perror("Fork failed"); 
+            exit(1); 
+         } 
+        else if (pid == 0) 
+         { 
+            // Child process 
+            
+            close(pipe_fd[1]); // Close write end of the pipe 
+            char received_message[256]; // Buffer to receive message from parent 
+            read(pipe_fd[0], received_message, sizeof(received_message)); // Read from pipe 
+            printf("Child process %d received message: %s", getpid(), received_message); 
+            close(pipe_fd[0]); // Close read end of the pipe 
+            exit(0); 
+         } 
+        else 
+         { 
+            // Parent process 
+            
+            close(pipe_fd[0]); // Close read end of the pipe 
+            write(pipe_fd[1], message, strlen(message) + 1); // Write to pipe 
+            child_pids[child_count++] = pid; // Store child process ID 
+            
+            if (child_count == MAX_CHILDREN)
+            { 
+                printf("Maximum number of child processes reached. Exiting...\n"); 
+                break; // Exit loop if maximum number of child processes is reached 
+            } 
+         } 
+    } 
+ 
+    handle_interrupt(SIGINT); // Terminate child processes and exit 
+ 
+    return 0; 
+}
